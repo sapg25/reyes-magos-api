@@ -1,0 +1,43 @@
+digraph Arquitectura {
+  graph [rankdir=TB, fontname="Helvetica", fontsize=20, labelloc=t, nodesep=0.5, ranksep=0.55, pad=0.4,
+         label="Escenario D · Logística de los Reyes Magos — Arquitectura en capas\n "];
+  node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=12, color="#555555", penwidth=1.2];
+  edge  [fontname="Helvetica", fontsize=10, color="#444444"];
+
+  cliente [label="Cliente\nPostman", fillcolor="#FFF4D6", shape=component];
+
+  subgraph cluster_api {
+    label="API REST · Node.js + Express (src/)"; fontsize=14; style="rounded,dashed"; color="#888888";
+
+    entrada [label="Punto de entrada\nserver.js → app.js\nexpress.json()", fillcolor="#E8EEF9"];
+    rutas   [label="Rutas\nroutes/index.js\n(método + URL + seguridad)", fillcolor="#E8EEF9"];
+    auth    [label="Middleware de seguridad\nmiddlewares/auth.js\nJWT: sin token → 401 · otro rol → 403", fillcolor="#FCE3E3"];
+    ctrl    [label="Controladores (delgados)\ncaravana / parada / auth .controller.js\n+ validators: formato → 400", fillcolor="#E8EEF9"];
+    serv    [label="Servicios — REGLAS DE NEGOCIO\ncaravana.service.js · parada.service.js\ntransiciones 409 · estrella NUBLADA / paradas pendientes 422", fillcolor="#DFF3E4", penwidth=2];
+    repo    [label="Repositorios (datos en memoria)\ncaravana.repository.js · parada.repository.js", fillcolor="#EFE7F7", shape=cylinder];
+    adapter [label="EstrellaAdapter\nadapters/EstrellaAdapter.js\nobjeto ↔ XML · timeout 3 s · 2 intentos con backoff", fillcolor="#FFE9D6"];
+    fallo   [label="Punto de manejo del fallo\nFault / timeout → ServicioExternoError\nservicio → caravana sigue DETENIDA → 503", shape=note, fillcolor="#FFF0F0", color="#C0392B", fontcolor="#C0392B"];
+    errores [label="Manejador global de errores\nmiddlewares/errorHandler.js\n{ codigo, mensaje, detalles, timestamp, ruta }", fillcolor="#FCE3E3"];
+    env     [label=".env (JWT_SECRET, ESTRELLA_SOAP_URL…)\nconfig/env.js", shape=folder, fillcolor="#F2F2F2", fontsize=10];
+  }
+
+  soap [label="EstrellaDeBelenService (SOAP)\noperación ConsultarRuta\n(mock del docente / mock/estrella-mock.js)", fillcolor="#FFD9B3", shape=box3d];
+
+  cliente -> entrada [label=" HTTP + JSON\n Authorization: Bearer"];
+  entrada -> rutas;
+  rutas   -> auth    [label=" rutas con rol"];
+  auth    -> ctrl;
+  rutas   -> ctrl    [label=" rutas públicas", style=dashed];
+  ctrl    -> serv;
+  serv    -> repo    [label=" leer / guardar"];
+  serv    -> adapter [label=" consultarRuta(origen)\n (solo DETENIDA → EN_CAMINO)"];
+  adapter -> soap    [label=" POST XML (soap:Envelope)", color="#D35400", fontcolor="#D35400"];
+  soap    -> adapter [label=" VISIBLE / NUBLADA\n o soap:Fault", style=dashed, color="#D35400", fontcolor="#D35400"];
+  adapter -> fallo   [color="#C0392B", style=dashed];
+  fallo   -> serv    [color="#C0392B", style=dashed, label=" se convierte en ApiError 503", fontcolor="#C0392B"];
+
+  {auth ctrl serv} -> errores [style=dotted, color="#C0392B", label=" throw ApiError"];
+  errores -> cliente [style=dotted, color="#C0392B", label=" respuesta de error\n 400/401/403/404/409/422/503", constraint=false];
+  env -> auth [style=dotted, arrowhead=none];
+  env -> adapter [style=dotted, arrowhead=none];
+}
